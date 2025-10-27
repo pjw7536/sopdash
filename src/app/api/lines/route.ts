@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getDistinctLineIds } from "@/lib/lines"
+import { getDistinctLineIds } from "@/features/line-dashboard/api"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

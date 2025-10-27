@@ -5,7 +5,7 @@ type DBConfig = {
   port: number
   user: string
   password: string
-  database?: strings
+  database?: string
 }
 
 let pool: mysql.Pool | null = null

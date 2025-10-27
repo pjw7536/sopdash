@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getLineDashboard } from "@/lib/lines"
+import { getLineDashboard } from "@/features/line-dashboard/api"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
