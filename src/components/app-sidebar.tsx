@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
 import {
   IconCamera,
   IconChartBar,
@@ -39,33 +40,6 @@ const data = {
     email: "m@example.com",
     avatar: "/avatars/shadcn.jpg",
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "#",
-      icon: IconDashboard,
-    },
-    {
-      title: "Lifecycle",
-      url: "#",
-      icon: IconListDetails,
-    },
-    {
-      title: "Analytics",
-      url: "#",
-      icon: IconChartBar,
-    },
-    {
-      title: "Projects",
-      url: "#",
-      icon: IconFolder,
-    },
-    {
-      title: "Team",
-      url: "#",
-      icon: IconUsers,
-    },
-  ],
   navClouds: [
     {
       title: "Capture",
@@ -150,7 +124,61 @@ const data = {
   ],
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
+  currentLine?: string
+}
+
+export function AppSidebar({ currentLine, ...props }: AppSidebarProps) {
+  const pathname = usePathname()
+
+  const activeLine = React.useMemo(() => {
+    if (!pathname) return null
+    const segments = pathname.split("/").filter(Boolean)
+    if (segments.length === 0) return currentLine ?? null
+    try {
+      return decodeURIComponent(segments[0])
+    } catch {
+      return segments[0]
+    }
+  }, [pathname, currentLine])
+
+  const navMainItems = React.useMemo(() => {
+    const line = activeLine ?? currentLine ?? ""
+    return [
+      {
+        title: "Dashboard",
+        url: line ? `/${encodeURIComponent(line)}/dashboard` : "#",
+        icon: IconDashboard,
+      },
+      {
+        title: "Lifecycle",
+        url: line ? `/${encodeURIComponent(line)}/lifecycle` : "#",
+        icon: IconListDetails,
+      },
+      {
+        title: "Analytics",
+        url: line ? `/${encodeURIComponent(line)}/analytics` : "#",
+        icon: IconChartBar,
+      },
+      {
+        title: "Projects",
+        url: line ? `/${encodeURIComponent(line)}/projects` : "#",
+        icon: IconFolder,
+      },
+      {
+        title: "Team",
+        url: line ? `/${encodeURIComponent(line)}/team` : "#",
+        icon: IconUsers,
+      },
+    ]
+  }, [activeLine, currentLine])
+
+  const displayLine = activeLine ?? currentLine ?? "Line Dashboard"
+  const homeHref =
+    displayLine && displayLine !== "Line Dashboard"
+      ? `/${encodeURIComponent(displayLine)}/dashboard`
+      : "#"
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -160,16 +188,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
-              <a href="#">
+              <a href={homeHref}>
                 <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">Acme Inc.</span>
+                <span className="text-base font-semibold">
+                  {displayLine}
+                </span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navMainItems} />
         <NavDocuments items={data.documents} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>

@@ -20,10 +20,12 @@ import {
   useReactTable,
   SortingState,
 } from "@tanstack/react-table"
+import type { Row } from "@tanstack/react-table"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -66,6 +68,29 @@ const tableDataSchema = z.object({
 })
 
 type TableOption = z.infer<typeof tableOptionSchema>
+type HandleUpdateFn = (
+  recordId: string,
+  updates: {
+    comment?: string
+    needtosend?: number
+  }
+) => Promise<boolean>
+
+type DataTableMeta = {
+  commentDrafts: Record<string, string>
+  commentEditing: Record<string, boolean>
+  needToSendDrafts: Record<string, number>
+  updatingCells: Record<string, boolean>
+  updateErrors: Record<string, string>
+  selectedTable: string
+  clearUpdateError: (key: string) => void
+  setCommentDraftValue: (recordId: string, value: string) => void
+  removeCommentDraftValue: (recordId: string) => void
+  setCommentEditingState: (recordId: string, editing: boolean) => void
+  setNeedToSendDraftValue: (recordId: string, value: number) => void
+  removeNeedToSendDraftValue: (recordId: string) => void
+  handleUpdate: HandleUpdateFn
+}
 
 const numberFormatter = new Intl.NumberFormat()
 const timeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -116,7 +141,11 @@ function searchableValue(value: unknown) {
 
 // ─────────────────────────────────────────────────────────
 
-export function DataTable() {
+type DataTableProps = {
+  lineId: string
+}
+
+export function DataTable({ lineId }: DataTableProps) {
   const [tables, setTables] = React.useState<TableOption[]>([])
   const [selectedTable, setSelectedTable] = React.useState<string>("")
   const [columns, setColumns] = React.useState<string[]>([])
@@ -125,6 +154,11 @@ export function DataTable() {
   const [appliedLimit, setAppliedLimit] = React.useState<number>(DEFAULT_LIMIT)
   const [filter, setFilter] = React.useState("")             // 🔸 전역 필터 텍스트
   const [sorting, setSorting] = React.useState<SortingState>([]) // 🔸 정렬 상태
+  const [commentDrafts, setCommentDrafts] = React.useState<Record<string, string>>({})
+  const [commentEditing, setCommentEditing] = React.useState<Record<string, boolean>>({})
+  const [needToSendDrafts, setNeedToSendDrafts] = React.useState<Record<string, number>>({})
+  const [updatingCells, setUpdatingCells] = React.useState<Record<string, boolean>>({})
+  const [updateErrors, setUpdateErrors] = React.useState<Record<string, string>>({})
 
   const [isLoadingTables, setIsLoadingTables] = React.useState(false)
   const [isLoadingRows, setIsLoadingRows] = React.useState(false)
@@ -192,6 +226,9 @@ export function DataTable() {
     setRowsError(null)
     try {
       const params = new URLSearchParams({ table: selectedTable, limit: String(limit) })
+      if (lineId) {
+        params.set("lineId", lineId)
+      }
       const response = await fetch(`/api/tables?${params.toString()}`, { cache: "no-store" })
       if (!response.ok) {
         const json = await response.json().catch(() => ({}))
@@ -208,6 +245,9 @@ export function DataTable() {
       setRows(fetchedRows)
       setLastFetchedCount(parsed.data.rowCount)
       setAppliedLimit(parsed.data.limit)
+      setCommentDrafts({})
+      setCommentEditing({})
+      setNeedToSendDrafts({})
       if (parsed.data.table && parsed.data.table !== selectedTable) {
         setSelectedTable(parsed.data.table)
       }
@@ -219,10 +259,140 @@ export function DataTable() {
     } finally {
       if (rowsRequestRef.current === requestId) setIsLoadingRows(false)
     }
-  }, [limit, selectedTable])
+  }, [limit, selectedTable, lineId])
 
   React.useEffect(() => { fetchTables() }, [fetchTables])
   React.useEffect(() => { fetchRows() }, [fetchRows])
+
+  const clearUpdateError = React.useCallback((key: string) => {
+    setUpdateErrors((prev) => {
+      if (!(key in prev)) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }, [])
+
+  const handleUpdate = React.useCallback(
+    async (
+      recordId: string,
+      updates: {
+        comment?: string
+        needtosend?: number
+      }
+    ) => {
+      const fields = Object.keys(updates) as Array<"comment" | "needtosend">
+      if (!recordId || fields.length === 0) return false
+      if (!selectedTable) {
+        fields.forEach((field) => {
+          const key = `${recordId}:${field}`
+          setUpdateErrors((prev) => ({
+            ...prev,
+            [key]: "Select a table before editing.",
+          }))
+        })
+        return false
+      }
+
+      const cellKeys = fields.map((field) => `${recordId}:${field}`)
+
+      setUpdatingCells((prev) => {
+        const next = { ...prev }
+        cellKeys.forEach((key) => {
+          next[key] = true
+        })
+        return next
+      })
+
+      setUpdateErrors((prev) => {
+        const next = { ...prev }
+        cellKeys.forEach((key) => {
+          if (key in next) delete next[key]
+        })
+        return next
+      })
+
+      try {
+        const response = await fetch("/api/tables/update", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            table: selectedTable,
+            id: recordId,
+            updates,
+          }),
+        })
+
+        if (!response.ok) {
+          const json = await response.json().catch(() => ({}))
+          const message =
+            typeof json.error === "string"
+              ? json.error
+              : `Failed to update (status ${response.status})`
+          throw new Error(message)
+        }
+
+        setRows((previousRows) =>
+          previousRows.map((row) => {
+            const rowId = String((row as { id?: unknown }).id ?? "")
+            if (rowId !== recordId) return row
+            return {
+              ...row,
+              ...updates,
+            }
+          })
+        )
+
+        if ("comment" in updates) {
+          setCommentDrafts((prev) => {
+            const next = { ...prev }
+            delete next[recordId]
+            return next
+          })
+          setCommentEditing((prev) => {
+            if (!(recordId in prev)) return prev
+            const next = { ...prev }
+            delete next[recordId]
+            return next
+          })
+        }
+
+        if ("needtosend" in updates) {
+          setNeedToSendDrafts((prev) => {
+            const next = { ...prev }
+            delete next[recordId]
+            return next
+          })
+        }
+
+        return true
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to update"
+
+        setUpdateErrors((prev) => {
+          const next = { ...prev }
+          cellKeys.forEach((key) => {
+            next[key] = message
+          })
+          return next
+        })
+
+        return false
+      } finally {
+        setUpdatingCells((prev) => {
+          const next = { ...prev }
+          cellKeys.forEach((key) => {
+            delete next[key]
+          })
+          return next
+        })
+      }
+    },
+    [selectedTable]
+  )
 
   // ─────────────────────────────────────────────────────────
   // 🔸 TanStack: 동적 컬럼 정의
@@ -230,13 +400,267 @@ export function DataTable() {
   // - accessorFn으로 안전하게 값 접근
   // - 헤더 클릭 시 정렬
   // ─────────────────────────────────────────────────────────
+  const setCommentEditingState = React.useCallback((recordId: string, editing: boolean) => {
+    if (!recordId) return
+    setCommentEditing((prev) => {
+      if (editing) {
+        return {
+          ...prev,
+          [recordId]: true,
+        }
+      }
+      if (!(recordId in prev)) return prev
+      const next = { ...prev }
+      delete next[recordId]
+      return next
+    })
+  }, [])
+
+  const setCommentDraftValue = React.useCallback((recordId: string, value: string) => {
+    if (!recordId) return
+    setCommentDrafts((prev) => ({
+      ...prev,
+      [recordId]: value,
+    }))
+  }, [])
+
+  const removeCommentDraftValue = React.useCallback((recordId: string) => {
+    if (!recordId) return
+    setCommentDrafts((prev) => {
+      if (!(recordId in prev)) return prev
+      const next = { ...prev }
+      delete next[recordId]
+      return next
+    })
+  }, [])
+
+  const setNeedToSendDraftValue = React.useCallback((recordId: string, value: number) => {
+    if (!recordId) return
+    setNeedToSendDrafts((prev) => ({
+      ...prev,
+      [recordId]: value,
+    }))
+  }, [])
+
+  const removeNeedToSendDraftValue = React.useCallback((recordId: string) => {
+    if (!recordId) return
+    setNeedToSendDrafts((prev) => {
+      if (!(recordId in prev)) return prev
+      const next = { ...prev }
+      delete next[recordId]
+      return next
+    })
+  }, [])
+
+  const tableMeta = React.useMemo<DataTableMeta>(
+    () => ({
+      commentDrafts,
+      commentEditing,
+      needToSendDrafts,
+      updatingCells,
+      updateErrors,
+      selectedTable,
+      clearUpdateError,
+      setCommentDraftValue,
+      removeCommentDraftValue,
+      setCommentEditingState,
+      setNeedToSendDraftValue,
+      removeNeedToSendDraftValue,
+      handleUpdate,
+    }),
+    [
+      commentDrafts,
+      commentEditing,
+      needToSendDrafts,
+      updatingCells,
+      updateErrors,
+      selectedTable,
+      clearUpdateError,
+      setCommentDraftValue,
+      removeCommentDraftValue,
+      setCommentEditingState,
+      setNeedToSendDraftValue,
+      removeNeedToSendDraftValue,
+      handleUpdate,
+    ]
+  )
+
   const columnDefs = React.useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
     return columns.map((colKey) => ({
       id: colKey,
       header: () => colKey,
       accessorFn: (row) => row[colKey],
-      cell: (info) => formatCellValue(info.getValue()),
-      enableSorting: true,
+      cell: (info) => {
+        const meta = info.table.options.meta as DataTableMeta | undefined
+
+        if (colKey === "comment") {
+          const rowData = info.row.original as { [key: string]: unknown }
+          const rawId = rowData?.id
+          if (!meta || rawId === undefined || rawId === null) {
+            return formatCellValue(info.getValue())
+          }
+          const recordId = String(rawId)
+          const baseValueRaw = rowData?.comment
+          const baseValue =
+            typeof baseValueRaw === "string"
+              ? baseValueRaw
+              : baseValueRaw == null
+                ? ""
+                : String(baseValueRaw)
+          const isEditing = Boolean(meta.commentEditing[recordId])
+          const draftValue = meta.commentDrafts[recordId]
+          const value = isEditing ? draftValue ?? baseValue : baseValue
+          const isSaving = Boolean(meta.updatingCells[`${recordId}:comment`])
+          const errorMessage = meta.updateErrors[`${recordId}:comment`]
+
+          const handleSave = async () => {
+            const nextValue = draftValue ?? baseValue
+            if (nextValue === baseValue) {
+              meta.setCommentEditingState(recordId, false)
+              meta.removeCommentDraftValue(recordId)
+              return
+            }
+            const success = await meta.handleUpdate(recordId, { comment: nextValue })
+            if (!success) {
+              return
+            }
+            meta.setCommentEditingState(recordId, false)
+          }
+
+          const handleCancel = () => {
+            meta.setCommentEditingState(recordId, false)
+            meta.removeCommentDraftValue(recordId)
+            meta.clearUpdateError(`${recordId}:comment`)
+          }
+
+          return (
+            <div className="flex flex-col gap-1">
+              {isEditing ? (
+                <>
+                  <textarea
+                    value={value}
+                    disabled={isSaving || !meta.selectedTable}
+                    onChange={(event) => {
+                      const nextValue = event.target.value
+                      meta.setCommentDraftValue(recordId, nextValue)
+                      meta.clearUpdateError(`${recordId}:comment`)
+                    }}
+                    className="min-h-[3rem] resize-y rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+                    aria-label="Edit comment"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        void handleSave()
+                      }}
+                      disabled={isSaving || !meta.selectedTable}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCancel}
+                      disabled={isSaving}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="whitespace-pre-wrap break-words text-sm">
+                    {baseValue.length > 0 ? (
+                      baseValue
+                    ) : (
+                      <span className="text-muted-foreground">No comment</span>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-fit"
+                    onClick={() => {
+                      meta.setCommentDraftValue(recordId, baseValue)
+                      meta.setCommentEditingState(recordId, true)
+                      meta.clearUpdateError(`${recordId}:comment`)
+                    }}
+                    disabled={!meta.selectedTable}
+                  >
+                    Edit
+                  </Button>
+                </>
+              )}
+              {isSaving ? (
+                <span className="text-xs text-muted-foreground">Saving…</span>
+              ) : errorMessage ? (
+                <span className="text-xs text-destructive">{errorMessage}</span>
+              ) : null}
+            </div>
+          )
+        }
+
+        if (colKey === "needtosend") {
+          const rowData = info.row.original as { [key: string]: unknown }
+          const rawId = rowData?.id
+          if (!meta || rawId === undefined || rawId === null) {
+            return formatCellValue(info.getValue())
+          }
+          const recordId = String(rawId)
+          const baseValueRaw = rowData?.needtosend
+          const baseValue =
+            typeof baseValueRaw === "number"
+              ? baseValueRaw
+              : typeof baseValueRaw === "string"
+                ? Number.parseInt(baseValueRaw, 10) || 0
+                : Number(baseValueRaw) || 0
+          const draftValue = meta.needToSendDrafts[recordId]
+          const nextValue = draftValue ?? baseValue
+          const isChecked = Number(nextValue) === 1
+          const isSaving = Boolean(meta.updatingCells[`${recordId}:needtosend`])
+          const errorMessage = meta.updateErrors[`${recordId}:needtosend`]
+
+          return (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={isChecked}
+                  onCheckedChange={async (checked) => {
+                    const numericNext = checked ? 1 : 0
+                    if (numericNext === baseValue) {
+                      meta.removeNeedToSendDraftValue(recordId)
+                      meta.clearUpdateError(`${recordId}:needtosend`)
+                      return
+                    }
+                    meta.setNeedToSendDraftValue(recordId, numericNext)
+                    meta.clearUpdateError(`${recordId}:needtosend`)
+                    const success = await meta.handleUpdate(recordId, {
+                      needtosend: numericNext,
+                    })
+                    if (!success) {
+                      meta.removeNeedToSendDraftValue(recordId)
+                    }
+                  }}
+                  disabled={isSaving || !meta.selectedTable}
+                  aria-label="Toggle need to send"
+                />
+                <span className="text-xs text-muted-foreground">
+                  {isChecked ? "Yes" : "No"}
+                </span>
+              </div>
+              {isSaving ? (
+                <span className="text-xs text-muted-foreground">Saving…</span>
+              ) : errorMessage ? (
+                <span className="text-xs text-destructive">{errorMessage}</span>
+              ) : null}
+            </div>
+          )
+        }
+
+        return formatCellValue(info.getValue())
+      },
+      enableSorting: colKey !== "comment", // comment 정렬은 비활성화 (편집 필드)
     }))
   }, [columns])
 
@@ -245,7 +669,7 @@ export function DataTable() {
   // - 모든 컬럼의 값을 합쳐서 includes 검색 (기존 searchableValue 재사용)
   // ─────────────────────────────────────────────────────────
   const globalFilterFn = React.useCallback(
-    (row: any, _columnId: string, filterValue: string) => {
+    (row: Row<Record<string, unknown>>, _columnId: string, filterValue: string) => {
       if (!filterValue) return true
       const lc = String(filterValue).toLowerCase()
       // 표시 중인 컬럼만 대상으로 검색
@@ -265,6 +689,7 @@ export function DataTable() {
   const table = useReactTable({
     data: rows,
     columns: columnDefs,
+    meta: tableMeta,
     state: {
       sorting,
       globalFilter: filter,
@@ -280,7 +705,6 @@ export function DataTable() {
   })
 
   const totalLoaded = rows.length
-  const filteredCount = table.getRowModel().rows.length
   const hasNoRows = !isLoadingRows && rowsError === null && columns.length === 0
 
   return (
@@ -289,14 +713,15 @@ export function DataTable() {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 text-lg font-semibold">
             <IconDatabase className="size-5" />
-            데이터 테이블
-            <p className="ml-3 text-sm text-muted-foreground">
+            데이터 테이블 · {lineId}
+          </div>
+          <p className="text-sm text-muted-foreground">
             {selectedTable
               ? `Loaded ${numberFormatter.format(totalLoaded)} rows (limit ${numberFormatter.format(
-                  appliedLimit         )})`
-              : "Select a table to display its rows."}
+                  appliedLimit
+                )})`
+              : "Select a table to inspect its rows."}
           </p>
-          </div>
         </div>
       </div>
 

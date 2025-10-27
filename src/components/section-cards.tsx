@@ -1,4 +1,10 @@
-import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react"
+import {
+  IconAlertTriangle,
+  IconCircleCheck,
+  IconTrendingDown,
+  IconTrendingUp,
+} from "@tabler/icons-react"
+
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -7,81 +13,105 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-  CardContent,
 } from "@/components/ui/card"
-import { ChartAreaInteractiveBody } from "@/components/chart-area-interactive" 
+import type { LineSummary, LineTrendPoint } from "@/lib/lines"
 
-export function SectionCards() {
+type SectionCardsProps = {
+  lineId: string
+  summary: LineSummary
+  trend: LineTrendPoint[]
+}
+
+const numberFormatter = new Intl.NumberFormat()
+
+const formatDelta = (delta: number) => {
+  if (delta === 0) return "0"
+  return delta > 0 ? `+${numberFormatter.format(delta)}` : numberFormatter.format(delta)
+}
+
+export function SectionCards({ lineId, summary, trend }: SectionCardsProps) {
+  const sortedTrend = [...trend].sort((a, b) => a.date.localeCompare(b.date))
+  const latestPoint = sortedTrend.at(-1)
+  const previousPoint = sortedTrend.at(-2)
+
+  const activeDelta =
+    latestPoint && previousPoint
+      ? latestPoint.activeCount - previousPoint.activeCount
+      : 0
+  const completedDelta =
+    latestPoint && previousPoint
+      ? latestPoint.completedCount - previousPoint.completedCount
+      : 0
+
+  const completionRate =
+    summary.totalCount > 0
+      ? Math.round((summary.completedCount / summary.totalCount) * 100)
+      : 0
+  const jiraSentCount = Math.max(summary.completedCount - summary.pendingJiraCount, 0)
+
   return (
-    <div className="grid grid-cols-5 auto-rows-fr gap-4 px-6 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:shadow-xs">
-      {/* 카드 1 */}
-      <Card className="h-full flex flex-col">
+    <div className="grid grid-cols-1 gap-4 px-4 md:grid-cols-3 lg:px-6">
+      <Card className="h-full bg-gradient-to-t from-primary/5 to-card shadow-xs dark:bg-card">
         <CardHeader>
-          <CardDescription>Total Revenue</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums">
-            $1,250.00
+          <CardDescription>Total Records · {lineId}</CardDescription>
+          <CardTitle className="text-3xl font-semibold tabular-nums">
+            {numberFormatter.format(summary.totalCount)}
           </CardTitle>
           <CardAction>
-            <Badge variant="outline">
-              <IconTrendingUp />
-              +12.5%
+            <Badge variant="outline" className="gap-1">
+              {activeDelta >= 0 ? <IconTrendingUp /> : <IconTrendingDown />}
+              {formatDelta(activeDelta)}
             </Badge>
           </CardAction>
         </CardHeader>
-        <CardFooter className="flex-col items-start gap-1 text-sm">
-          <div className="flex gap-2 font-medium">
-            Trending up this month <IconTrendingUp className="size-4" />
+        <CardFooter className="flex-col items-start gap-1 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            Current active items: {numberFormatter.format(latestPoint?.activeCount ?? summary.activeCount)}
           </div>
+          <p>Tracks total SOP records captured for the selected line.</p>
         </CardFooter>
       </Card>
 
-      {/* 카드 2 */}
-      <Card className="h-full flex flex-col">
+      <Card className="h-full bg-gradient-to-t from-primary/5 to-card shadow-xs dark:bg-card">
         <CardHeader>
-          <CardDescription>New Customers</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums">
-            1,234
+          <CardDescription>Lots Completed</CardDescription>
+          <CardTitle className="text-3xl font-semibold tabular-nums">
+            {numberFormatter.format(summary.completedCount)}
           </CardTitle>
           <CardAction>
-            <Badge variant="outline">
-              <IconTrendingDown />
-              -20%
+            <Badge variant="outline" className="gap-1">
+              <IconCircleCheck />
+              {completionRate}% done
             </Badge>
           </CardAction>
         </CardHeader>
-        <CardFooter className="flex-col items-start gap-1 text-sm">
-          <div className="flex gap-2 font-medium">
-            Down 20% this period <IconTrendingDown className="size-4" />
+        <CardFooter className="flex-col items-start gap-1 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            Change vs last day {formatDelta(completedDelta)}
           </div>
+          <p>{numberFormatter.format(summary.lotCount)} distinct lots processed overall.</p>
         </CardFooter>
       </Card>
 
-      {/* 카드 3 */}
-      <Card className="h-full flex flex-col">
+      <Card className="h-full bg-gradient-to-t from-primary/5 to-card shadow-xs dark:bg-card">
         <CardHeader>
-          <CardDescription>Active Accounts</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums">
-            45,678
+          <CardDescription>Pending Jira Dispatch</CardDescription>
+          <CardTitle className="text-3xl font-semibold tabular-nums">
+            {numberFormatter.format(summary.pendingJiraCount)}
           </CardTitle>
           <CardAction>
-            <Badge variant="outline">
-              <IconTrendingUp />
-              +12.5%
+            <Badge variant="outline" className="gap-1">
+              <IconAlertTriangle />
+              Needs attention
             </Badge>
           </CardAction>
         </CardHeader>
-        <CardFooter className="flex-col items-start gap-1 text-sm">
-          <div className="flex gap-2 font-medium">
-            Strong user retention <IconTrendingUp className="size-4" />
+        <CardFooter className="flex-col items-start gap-1 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            Jira sent: {numberFormatter.format(jiraSentCount)}
           </div>
+          <p>Open items where Jira has not been dispatched yet.</p>
         </CardFooter>
-      </Card>
-
- {/* ✅ 차트: 바깥은 Card, 안에는 Body만 */}
-      <Card className="col-span-2 py-1 h-full flex flex-col">
-        <CardContent className="p-0 flex-1">
-          <ChartAreaInteractiveBody />
-        </CardContent>
       </Card>
     </div>
   )

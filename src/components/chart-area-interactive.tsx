@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import { useIsMobile } from "@/hooks/use-mobile"
+import type { LineTrendPoint } from "@/lib/lines"
 import {
   ChartConfig,
   ChartContainer,
@@ -11,173 +12,100 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart"
 import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group"
 
-
-const chartData = [
-  { date: "2024-04-01", desktop: 222, mobile: 150 },
-  { date: "2024-04-02", desktop: 97, mobile: 180 },
-  { date: "2024-04-03", desktop: 167, mobile: 120 },
-  { date: "2024-04-04", desktop: 242, mobile: 260 },
-  { date: "2024-04-05", desktop: 373, mobile: 290 },
-  { date: "2024-04-06", desktop: 301, mobile: 340 },
-  { date: "2024-04-07", desktop: 245, mobile: 180 },
-  { date: "2024-04-08", desktop: 409, mobile: 320 },
-  { date: "2024-04-09", desktop: 59, mobile: 110 },
-  { date: "2024-04-10", desktop: 261, mobile: 190 },
-  { date: "2024-04-11", desktop: 327, mobile: 350 },
-  { date: "2024-04-12", desktop: 292, mobile: 210 },
-  { date: "2024-04-13", desktop: 342, mobile: 380 },
-  { date: "2024-04-14", desktop: 137, mobile: 220 },
-  { date: "2024-04-15", desktop: 120, mobile: 170 },
-  { date: "2024-04-16", desktop: 138, mobile: 190 },
-  { date: "2024-04-17", desktop: 446, mobile: 360 },
-  { date: "2024-04-18", desktop: 364, mobile: 410 },
-  { date: "2024-04-19", desktop: 243, mobile: 180 },
-  { date: "2024-04-20", desktop: 89, mobile: 150 },
-  { date: "2024-04-21", desktop: 137, mobile: 200 },
-  { date: "2024-04-22", desktop: 224, mobile: 170 },
-  { date: "2024-04-23", desktop: 138, mobile: 230 },
-  { date: "2024-04-24", desktop: 387, mobile: 290 },
-  { date: "2024-04-25", desktop: 215, mobile: 250 },
-  { date: "2024-04-26", desktop: 75, mobile: 130 },
-  { date: "2024-04-27", desktop: 383, mobile: 420 },
-  { date: "2024-04-28", desktop: 122, mobile: 180 },
-  { date: "2024-04-29", desktop: 315, mobile: 240 },
-  { date: "2024-04-30", desktop: 454, mobile: 380 },
-  { date: "2024-05-01", desktop: 165, mobile: 220 },
-  { date: "2024-05-02", desktop: 293, mobile: 310 },
-  { date: "2024-05-03", desktop: 247, mobile: 190 },
-  { date: "2024-05-04", desktop: 385, mobile: 420 },
-  { date: "2024-05-05", desktop: 481, mobile: 390 },
-  { date: "2024-05-06", desktop: 498, mobile: 520 },
-  { date: "2024-05-07", desktop: 388, mobile: 300 },
-  { date: "2024-05-08", desktop: 149, mobile: 210 },
-  { date: "2024-05-09", desktop: 227, mobile: 180 },
-  { date: "2024-05-10", desktop: 293, mobile: 330 },
-  { date: "2024-05-11", desktop: 335, mobile: 270 },
-  { date: "2024-05-12", desktop: 197, mobile: 240 },
-  { date: "2024-05-13", desktop: 197, mobile: 160 },
-  { date: "2024-05-14", desktop: 448, mobile: 490 },
-  { date: "2024-05-15", desktop: 473, mobile: 380 },
-  { date: "2024-05-16", desktop: 338, mobile: 400 },
-  { date: "2024-05-17", desktop: 499, mobile: 420 },
-  { date: "2024-05-18", desktop: 315, mobile: 350 },
-  { date: "2024-05-19", desktop: 235, mobile: 180 },
-  { date: "2024-05-20", desktop: 177, mobile: 230 },
-  { date: "2024-05-21", desktop: 82, mobile: 140 },
-  { date: "2024-05-22", desktop: 81, mobile: 120 },
-  { date: "2024-05-23", desktop: 252, mobile: 290 },
-  { date: "2024-05-24", desktop: 294, mobile: 220 },
-  { date: "2024-05-25", desktop: 201, mobile: 250 },
-  { date: "2024-05-26", desktop: 213, mobile: 170 },
-  { date: "2024-05-27", desktop: 420, mobile: 460 },
-  { date: "2024-05-28", desktop: 233, mobile: 190 },
-  { date: "2024-05-29", desktop: 78, mobile: 130 },
-  { date: "2024-05-30", desktop: 340, mobile: 280 },
-  { date: "2024-05-31", desktop: 178, mobile: 230 },
-  { date: "2024-06-01", desktop: 178, mobile: 200 },
-  { date: "2024-06-02", desktop: 470, mobile: 410 },
-  { date: "2024-06-03", desktop: 103, mobile: 160 },
-  { date: "2024-06-04", desktop: 439, mobile: 380 },
-  { date: "2024-06-05", desktop: 88, mobile: 140 },
-  { date: "2024-06-06", desktop: 294, mobile: 250 },
-  { date: "2024-06-07", desktop: 323, mobile: 370 },
-  { date: "2024-06-08", desktop: 385, mobile: 320 },
-  { date: "2024-06-09", desktop: 438, mobile: 480 },
-  { date: "2024-06-10", desktop: 155, mobile: 200 },
-  { date: "2024-06-11", desktop: 92, mobile: 150 },
-  { date: "2024-06-12", desktop: 492, mobile: 420 },
-  { date: "2024-06-13", desktop: 81, mobile: 130 },
-  { date: "2024-06-14", desktop: 426, mobile: 380 },
-  { date: "2024-06-15", desktop: 307, mobile: 350 },
-  { date: "2024-06-16", desktop: 371, mobile: 310 },
-  { date: "2024-06-17", desktop: 475, mobile: 520 },
-  { date: "2024-06-18", desktop: 107, mobile: 170 },
-  { date: "2024-06-19", desktop: 341, mobile: 290 },
-  { date: "2024-06-20", desktop: 408, mobile: 450 },
-  { date: "2024-06-21", desktop: 169, mobile: 210 },
-  { date: "2024-06-22", desktop: 317, mobile: 270 },
-  { date: "2024-06-23", desktop: 480, mobile: 530 },
-  { date: "2024-06-24", desktop: 132, mobile: 180 },
-  { date: "2024-06-25", desktop: 141, mobile: 190 },
-  { date: "2024-06-26", desktop: 434, mobile: 380 },
-  { date: "2024-06-27", desktop: 448, mobile: 490 },
-  { date: "2024-06-28", desktop: 149, mobile: 200 },
-  { date: "2024-06-29", desktop: 103, mobile: 160 },
-  { date: "2024-06-30", desktop: 446, mobile: 400 },
-]
+type ChartAreaInteractiveProps = {
+  lineId: string
+  trend: LineTrendPoint[]
+}
 
 const chartConfig = {
-  visitors: { label: "Visitors" },
-  desktop: { label: "Desktop", color: "var(--primary)" },
-  mobile: { label: "Mobile", color: "var(--primary)" },
+  activeCount: { label: "Active", color: "var(--primary)" },
+  completedCount: { label: "Completed", color: "var(--chart-4)" },
 } satisfies ChartConfig
 
-/** ✅ Card에 종속되지 않는 바디-only 컴포넌트 */
-export function ChartAreaInteractiveBody() {
+const numberFormatter = new Intl.NumberFormat()
+
+export function ChartAreaInteractive({ lineId, trend }: ChartAreaInteractiveProps) {
   const isMobile = useIsMobile()
-  const [timeRange, setTimeRange] = React.useState("90d")
+  const [timeRange, setTimeRange] = React.useState<"90d" | "30d" | "7d">("90d")
 
   React.useEffect(() => {
     if (isMobile) setTimeRange("7d")
   }, [isMobile])
 
-  const filteredData = chartData.filter((item) => {
-    const date = new Date(item.date)
-    const referenceDate = new Date("2024-06-30")
-    let daysToSubtract = timeRange === "30d" ? 30 : timeRange === "7d" ? 7 : 90
+  const sortedTrend = React.useMemo(
+    () => [...trend].sort((a, b) => a.date.localeCompare(b.date)),
+    [trend]
+  )
+  const latestDate = sortedTrend.at(-1)?.date
+
+  const filteredData = React.useMemo(() => {
+    if (!sortedTrend.length) return []
+
+    const dayWindow = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90
+    const referenceDate = latestDate ? new Date(latestDate) : new Date()
     const startDate = new Date(referenceDate)
-    startDate.setDate(startDate.getDate() - daysToSubtract)
-    return date >= startDate
-  })
+    startDate.setDate(referenceDate.getDate() - (dayWindow - 1))
+
+    return sortedTrend.filter((point) => {
+      const pointDate = new Date(point.date)
+      return pointDate >= startDate && pointDate <= referenceDate
+    })
+  }, [sortedTrend, latestDate, timeRange])
+
+  const hasData = filteredData.length > 0
 
   return (
-    <div className="flex h-full w-full flex-col">
-      {/* Header 영역 */}
-      <div className="flex items-start justify-between gap-2 px-6 pt-2">
+    <Card className="mx-4 flex h-full flex-col lg:mx-6">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-base font-semibold">Total Visitors</div>
-          <div className="text-sm text-muted-foreground">Total for the last 3 months</div>
+          <CardTitle className="text-lg font-semibold">
+            Line activity · {lineId}
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Completion and in-progress breakdown
+          </p>
         </div>
-
-        {/* 간단히: 토글은 항상 보이게, 셀렉트는 필요시 유지 */}
-        <div className="flex items-center gap-1">
-          {/* 선택형 UI를 유지하고 싶다면 그대로 둠 */}
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-40" size="sm" aria-label="Select a value">
-              <SelectValue placeholder="Last 3 months" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              <SelectItem value="90d" className="rounded-lg">Last 3 months</SelectItem>
-              <SelectItem value="30d" className="rounded-lg">Last 30 days</SelectItem>
-              <SelectItem value="7d" className="rounded-lg">Last 7 days</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Chart 영역 */}
-      <div className="flex-1 px-4 pb-1 pt-1">
-        <ChartContainer config={chartConfig} className="aspect-auto h-[100px] w-full">
+        <Select value={timeRange} onValueChange={(value) => setTimeRange(value as typeof timeRange)}>
+          <SelectTrigger className="w-40" size="sm" aria-label="Select time range">
+            <SelectValue placeholder="Last 90 days" />
+          </SelectTrigger>
+          <SelectContent className="rounded-xl">
+            <SelectItem value="90d" className="rounded-lg">
+              Last 90 days
+            </SelectItem>
+            <SelectItem value="30d" className="rounded-lg">
+              Last 30 days
+            </SelectItem>
+            <SelectItem value="7d" className="rounded-lg">
+              Last 7 days
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </CardHeader>
+      <CardContent className="h-[260px] px-0 pb-0">
+        <ChartContainer config={chartConfig} className="h-full w-full">
           <AreaChart data={filteredData}>
             <defs>
-              <linearGradient id="fillDesktop" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-desktop)" stopOpacity={1.0} />
-                <stop offset="95%" stopColor="var(--color-desktop)" stopOpacity={0.1} />
+              <linearGradient id="fillActive" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--color-activeCount)" stopOpacity={0.8} />
+                <stop offset="95%" stopColor="var(--color-activeCount)" stopOpacity={0.05} />
               </linearGradient>
-              <linearGradient id="fillMobile" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--color-mobile)" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="var(--color-mobile)" stopOpacity={0.1} />
+              <linearGradient id="fillCompleted" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--color-completedCount)" stopOpacity={0.7} />
+                <stop offset="95%" stopColor="var(--color-completedCount)" stopOpacity={0.05} />
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} />
@@ -186,54 +114,59 @@ export function ChartAreaInteractiveBody() {
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              minTickGap={32}
-              tickFormatter={(value) =>
-                new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-              }
+              minTickGap={24}
+            />
+            <YAxis
+              tickFormatter={(value) => numberFormatter.format(value as number)}
+              tickLine={false}
+              axisLine={false}
+              width={48}
             />
             <ChartTooltip
               cursor={false}
               content={
                 <ChartTooltipContent
-                  labelFormatter={(value) =>
-                    new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                  }
-                  indicator="dot"
+                  labelFormatter={(value) => {
+                    const date = new Date(value)
+                    return Number.isNaN(date.getTime())
+                      ? value
+                      : date.toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })
+                  }}
+                  formatter={(value, name) => [
+                    numberFormatter.format(value as number),
+                    name === "completedCount" ? "Completed" : "Active",
+                  ]}
                 />
               }
             />
             <Area
-              dataKey="mobile"
-              type="natural"
-              fill="url(#fillMobile)"
-              stroke="var(--color-mobile)"
-              stackId="a"
+              dataKey="activeCount"
+              name="Active"
+              type="monotone"
+              fill="url(#fillActive)"
+              stroke="var(--color-activeCount)"
+              strokeWidth={2}
+              stackId="line-trend"
             />
             <Area
-              dataKey="desktop"
-              type="natural"
-              fill="url(#fillDesktop)"
-              stroke="var(--color-desktop)"
-              stackId="a"
+              dataKey="completedCount"
+              name="Completed"
+              type="monotone"
+              fill="url(#fillCompleted)"
+              stroke="var(--color-completedCount)"
+              strokeWidth={2}
+              stackId="line-trend"
             />
           </AreaChart>
         </ChartContainer>
-      </div>
-    </div>
-  )
-}
-
-/** (선택) 기존 사용처 호환용: Card로 싸주는 래퍼 */
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card"
-
-export function ChartAreaInteractiveCard() {
-  return (
-    <Card className="h-full flex flex-col">
-      <CardContent className="p-0 flex-1">
-        <ChartAreaInteractiveBody />
+        {!hasData ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            No trend data available for this range.
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )

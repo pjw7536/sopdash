@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import type { MysqlError } from "mysql2"
 
 import { runQuery } from "@/lib/db"
 
@@ -62,6 +63,15 @@ function normalizeRows(rows: Array<Record<string, unknown>>) {
 
     return plain
   })
+}
+
+function isUnknownColumnError(error: unknown): error is MysqlError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as MysqlError).code === "ER_BAD_FIELD_ERROR"
+  )
 }
 
 function parseLimit(rawLimit: string | null) {
@@ -128,6 +138,7 @@ export async function GET(request: Request) {
   const includeSystem =
     url.searchParams.get("includeSystem") === "true"
   const table = url.searchParams.get("table")
+  const lineId = url.searchParams.get("lineId")
 
   try {
     if (!table) {
@@ -139,10 +150,32 @@ export async function GET(request: Request) {
     const identifierParts = sanitizeTableIdentifier(table)
     const placeholder = buildTablePlaceholder(identifierParts)
 
-    const rows = await runQuery<Array<Record<string, unknown>>>(
-      `SELECT * FROM ${placeholder} LIMIT ?`,
-      [...identifierParts, limit]
-    )
+    const hasLineFilter = typeof lineId === "string" && lineId.length > 0
+    const baseParams: unknown[] = [...identifierParts]
+    let appliedLineId: string | null = null
+    let rows: Array<Record<string, unknown>>
+
+    try {
+      const filterClause = hasLineFilter ? " WHERE line_id = ? " : " "
+      const params = hasLineFilter
+        ? [...baseParams, lineId!, limit]
+        : [...baseParams, limit]
+      rows = await runQuery<Array<Record<string, unknown>>>(
+        `SELECT * FROM ${placeholder}${filterClause}LIMIT ?`,
+        params
+      )
+      appliedLineId = hasLineFilter ? lineId! : null
+    } catch (error) {
+      if (hasLineFilter && isUnknownColumnError(error)) {
+        rows = await runQuery<Array<Record<string, unknown>>>(
+          `SELECT * FROM ${placeholder} LIMIT ?`,
+          [...baseParams, limit]
+        )
+        appliedLineId = null
+      } else {
+        throw error
+      }
+    }
 
     const normalizedRows = normalizeRows(rows)
     const columns =
@@ -154,6 +187,7 @@ export async function GET(request: Request) {
       rowCount: normalizedRows.length,
       columns,
       rows: normalizedRows,
+      lineId: appliedLineId,
     })
   } catch (error) {
     if (error instanceof InvalidTableIdentifierError) {
