@@ -8,6 +8,7 @@ import {
   IconReload,
   IconChevronUp,
   IconChevronDown,
+  IconChevronRight,
 } from "@tabler/icons-react"
 import { z } from "zod"
 import {
@@ -41,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 
 // ─────────────────────────────────────────────────────────
 // 기존 상수/스키마/유틸은 그대로 사용
@@ -153,6 +155,99 @@ function searchableValue(value: unknown) {
   } catch {
     return String(value).toLowerCase()
   }
+}
+
+const STEP_COLUMN_KEYS = [
+  "main_step",
+  "metro_steps",
+  "metro_current_step",
+  "metro_end_step",
+  "custom_end_step",
+  "inform_step",
+] as const
+
+const STEP_COLUMN_KEY_SET = new Set<string>(STEP_COLUMN_KEYS)
+
+function normalizeStepValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  const normalized = String(value).trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+function parseMetroSteps(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((part) => normalizeStepValue(part))
+      .filter((step): step is string => Boolean(step))
+  }
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((part) => normalizeStepValue(part))
+      .filter((step): step is string => Boolean(step))
+  }
+  const single = normalizeStepValue(value)
+  return single ? [single] : []
+}
+
+function renderMetroStepFlow(rowData: Record<string, unknown>) {
+  const mainStep = normalizeStepValue(rowData.main_step)
+  const metroSteps = parseMetroSteps(rowData.metro_steps)
+  const statusValue = normalizeStepValue(rowData.status)
+  const metroCurrentStep = normalizeStepValue(rowData.metro_current_step)
+  const metroEndStep = normalizeStepValue(rowData.metro_end_step)
+  const customEndStep = normalizeStepValue(rowData.custom_end_step)
+  const informStep = normalizeStepValue(rowData.inform_step)
+
+  const highlightStep =
+    statusValue === "MAIN_COMPLETE"
+      ? mainStep ?? metroCurrentStep ?? null
+      : metroCurrentStep ?? mainStep ?? null
+
+  const endStep = customEndStep ?? metroEndStep ?? null
+
+  const orderedSteps: string[] = []
+  if (mainStep) orderedSteps.push(mainStep)
+  if (metroSteps.length > 0) orderedSteps.push(...metroSteps)
+  if (informStep) orderedSteps.push(informStep)
+  if (endStep && !orderedSteps.includes(endStep)) orderedSteps.push(endStep)
+
+  const seen = new Set<string>()
+  const steps = orderedSteps.filter((step) => {
+    if (seen.has(step)) {
+      return false
+    }
+    seen.add(step)
+    return true
+  })
+
+  if (steps.length === 0) {
+    return <span className="text-muted-foreground">-</span>
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {steps.map((step, index) => {
+        const isHighlight = highlightStep ? step === highlightStep : false
+        const isEnd = endStep ? step === endStep : false
+        const pillClasses = cn(
+          "rounded-full border px-2 py-0.5 text-xs font-medium leading-none",
+          isHighlight
+            ? "border-primary bg-blue-600 text-primary-foreground"
+            : isEnd && !isHighlight
+              ? "border-border bg-slate-800 text-muted-foreground"
+              : "border-border bg-white text-foreground"
+        )
+
+        return (
+          <div key={`${step}-${index}`} className="flex items-center gap-1">
+            {index > 0 ? <IconChevronRight className="size-4 shrink-0 text-muted-foreground" /> : null}
+            <span className={pillClasses}>{step}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // ─────────────────────────────────────────────────────────
@@ -653,7 +748,19 @@ export function DataTable({ lineId }: DataTableProps) {
   )
 
   const columnDefs = React.useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
-    return columns.map((colKey) => ({
+    const stepColumnsWithIndex = columns
+      .map((key, index) => ({ key, index }))
+      .filter(({ key }) => STEP_COLUMN_KEY_SET.has(key))
+
+    const shouldCombineSteps =
+      stepColumnsWithIndex.some(({ key }) => key === "main_step") ||
+      stepColumnsWithIndex.some(({ key }) => key === "metro_steps")
+
+    const baseColumnKeys = shouldCombineSteps
+      ? columns.filter((key) => !STEP_COLUMN_KEY_SET.has(key))
+      : [...columns]
+
+    const makeColumnDef = (colKey: string): ColumnDef<Record<string, unknown>> => ({
       id: colKey,
       header: () => colKey,
       accessorFn: (row) => row[colKey],
@@ -820,15 +927,15 @@ export function DataTable({ lineId }: DataTableProps) {
                 />
                 <div className="text-xs text-muted-foreground flex flex-row items-center gap-1">
                   {isChecked ? "Yes" : "No"}
-                {errorMessage ? (
-                  <div className="text-xs text-destructive">{errorMessage}</div>
-                ) : indicatorStatus === "saving" ? (
-                  <div className="text-xs text-muted-foreground">...</div>
-                ) : indicatorStatus === "saved" ? (
-                  <div className="text-xs text-emerald-600">✓</div>
-                ) : null}
-                  </div>
+                  {errorMessage ? (
+                    <div className="text-xs text-destructive">{errorMessage}</div>
+                  ) : indicatorStatus === "saving" ? (
+                    <div className="text-xs text-muted-foreground">...</div>
+                  ) : indicatorStatus === "saved" ? (
+                    <div className="text-xs text-emerald-600">✓</div>
+                  ) : null}
                 </div>
+              </div>
             </div>
           )
         }
@@ -836,7 +943,26 @@ export function DataTable({ lineId }: DataTableProps) {
         return formatCellValue(info.getValue())
       },
       enableSorting: colKey !== "comment", // comment 정렬은 비활성화 (편집 필드)
-    }))
+    })
+
+    const defs = baseColumnKeys.map((key) => makeColumnDef(key))
+
+    if (shouldCombineSteps) {
+      const insertionIndex = stepColumnsWithIndex.length
+        ? Math.min(...stepColumnsWithIndex.map(({ index }) => index))
+        : defs.length
+      const headerLabel = stepColumnsWithIndex[0]?.key ?? "Step Flow"
+      const stepColumnDef: ColumnDef<Record<string, unknown>> = {
+        id: "metro_step_flow",
+        header: () => headerLabel,
+        accessorFn: (row) => row["main_step"] ?? row["metro_steps"] ?? null,
+        cell: (info) => renderMetroStepFlow(info.row.original as Record<string, unknown>),
+        enableSorting: false,
+      }
+      defs.splice(Math.min(Math.max(insertionIndex, 0), defs.length), 0, stepColumnDef)
+    }
+
+    return defs
   }, [columns])
 
   // ─────────────────────────────────────────────────────────
@@ -878,6 +1004,8 @@ export function DataTable({ lineId }: DataTableProps) {
     getPaginationRowModel: getPaginationRowModel(),
     columnResizeMode: "onChange",
   })
+
+  const emptyStateColSpan = Math.max(table.getVisibleLeafColumns().length, 1)
 
   const totalLoaded = rows.length
   const hasNoRows = !isLoadingRows && rowsError === null && columns.length === 0
@@ -1010,25 +1138,25 @@ export function DataTable({ lineId }: DataTableProps) {
             <TableBody>
               {isLoadingRows ? (
                 <TableRow>
-                  <TableCell colSpan={columns.length || 1} className="h-24 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={emptyStateColSpan} className="h-24 text-center text-sm text-muted-foreground">
                     Loading rows…
                   </TableCell>
                 </TableRow>
               ) : rowsError ? (
                 <TableRow>
-                  <TableCell colSpan={columns.length || 1} className="h-24 text-center text-sm text-destructive">
+                  <TableCell colSpan={emptyStateColSpan} className="h-24 text-center text-sm text-destructive">
                     {rowsError}
                   </TableCell>
                 </TableRow>
               ) : hasNoRows ? (
                 <TableRow>
-                  <TableCell colSpan={columns.length || 1} className="h-24 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={emptyStateColSpan} className="h-24 text-center text-sm text-muted-foreground">
                     No rows returned for the selected table.
                   </TableCell>
                 </TableRow>
               ) : table.getRowModel().rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={columns.length || 1} className="h-24 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={emptyStateColSpan} className="h-24 text-center text-sm text-muted-foreground">
                     No rows match your filter.
                   </TableCell>
                 </TableRow>
