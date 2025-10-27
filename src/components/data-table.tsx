@@ -76,6 +76,17 @@ type HandleUpdateFn = (
   }
 ) => Promise<boolean>
 
+type CellIndicator = {
+  status: "saving" | "saved"
+  visibleSince: number
+}
+
+type IndicatorTimers = {
+  savingDelay?: ReturnType<typeof setTimeout>
+  transition?: ReturnType<typeof setTimeout>
+  savedCleanup?: ReturnType<typeof setTimeout>
+}
+
 type DataTableMeta = {
   commentDrafts: Record<string, string>
   commentEditing: Record<string, boolean>
@@ -83,6 +94,7 @@ type DataTableMeta = {
   updatingCells: Record<string, boolean>
   updateErrors: Record<string, string>
   selectedTable: string
+  cellIndicators: Record<string, CellIndicator>
   clearUpdateError: (key: string) => void
   setCommentDraftValue: (recordId: string, value: string) => void
   removeCommentDraftValue: (recordId: string) => void
@@ -91,6 +103,10 @@ type DataTableMeta = {
   removeNeedToSendDraftValue: (recordId: string) => void
   handleUpdate: HandleUpdateFn
 }
+
+const SAVING_DELAY_MS = 180
+const MIN_SAVING_VISIBLE_MS = 500
+const SAVED_VISIBLE_MS = 800
 
 const numberFormatter = new Intl.NumberFormat()
 const timeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -159,6 +175,7 @@ export function DataTable({ lineId }: DataTableProps) {
   const [needToSendDrafts, setNeedToSendDrafts] = React.useState<Record<string, number>>({})
   const [updatingCells, setUpdatingCells] = React.useState<Record<string, boolean>>({})
   const [updateErrors, setUpdateErrors] = React.useState<Record<string, string>>({})
+  const [cellIndicators, setCellIndicators] = React.useState<Record<string, CellIndicator>>({})
 
   const [isLoadingTables, setIsLoadingTables] = React.useState(false)
   const [isLoadingRows, setIsLoadingRows] = React.useState(false)
@@ -168,6 +185,29 @@ export function DataTable({ lineId }: DataTableProps) {
 
   const tablesRequestRef = React.useRef(0)
   const rowsRequestRef = React.useRef(0)
+  const cellIndicatorsRef = React.useRef(cellIndicators)
+  const indicatorTimersRef = React.useRef<Record<string, IndicatorTimers>>({})
+  const activeIndicatorKeysRef = React.useRef(new Set<string>())
+
+  React.useEffect(() => {
+    cellIndicatorsRef.current = cellIndicators
+  }, [cellIndicators])
+
+  React.useEffect(() => {
+    const timersRef = indicatorTimersRef
+    const activeKeysRef = activeIndicatorKeysRef
+
+    return () => {
+      const timersByKey = timersRef.current
+      Object.values(timersByKey).forEach((timers) => {
+        if (timers.savingDelay) clearTimeout(timers.savingDelay)
+        if (timers.transition) clearTimeout(timers.transition)
+        if (timers.savedCleanup) clearTimeout(timers.savedCleanup)
+      })
+      timersRef.current = {}
+      activeKeysRef.current.clear()
+    }
+  }, [])
 
   // ── 서버에서 테이블 목록 가져오기(기존 로직 유지) ─────────
   const fetchTables = React.useCallback(async () => {
@@ -273,6 +313,125 @@ export function DataTable({ lineId }: DataTableProps) {
     })
   }, [])
 
+  const getTimerEntry = React.useCallback((key: string): IndicatorTimers => {
+    const existing = indicatorTimersRef.current[key]
+    if (existing) return existing
+    const created: IndicatorTimers = {}
+    indicatorTimersRef.current[key] = created
+    return created
+  }, [])
+
+  const clearTimer = React.useCallback(
+    (key: string, timerName: keyof IndicatorTimers) => {
+      const entry = indicatorTimersRef.current[key]
+      if (!entry) return
+      const timer = entry[timerName]
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        delete entry[timerName]
+      }
+    },
+    []
+  )
+
+  const removeIndicatorImmediate = React.useCallback(
+    (key: string, allowedStatuses?: Array<CellIndicator["status"]>) => {
+      setCellIndicators((prev) => {
+        const current = prev[key]
+        if (!current) return prev
+        if (allowedStatuses && !allowedStatuses.includes(current.status)) {
+          return prev
+        }
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    },
+    []
+  )
+
+  const beginCellIndicators = React.useCallback(
+    (keys: string[]) => {
+      if (keys.length === 0) return
+      setCellIndicators((prev) => {
+        let next: typeof prev | null = null
+        keys.forEach((key) => {
+          if (key in prev) {
+            if (next === null) next = { ...prev }
+            delete next[key]
+          }
+        })
+        return next ?? prev
+      })
+      keys.forEach((key) => {
+        activeIndicatorKeysRef.current.add(key)
+        const timers = getTimerEntry(key)
+        clearTimer(key, "savingDelay")
+        clearTimer(key, "transition")
+        clearTimer(key, "savedCleanup")
+        timers.savingDelay = setTimeout(() => {
+          delete timers.savingDelay
+          if (!activeIndicatorKeysRef.current.has(key)) return
+          setCellIndicators((prev) => ({
+            ...prev,
+            [key]: { status: "saving", visibleSince: Date.now() },
+          }))
+        }, SAVING_DELAY_MS)
+      })
+    },
+    [clearTimer, getTimerEntry]
+  )
+
+  const finalizeCellIndicators = React.useCallback(
+    (keys: string[], outcome: "success" | "error") => {
+      if (keys.length === 0) return
+      const now = Date.now()
+      keys.forEach((key) => {
+        activeIndicatorKeysRef.current.delete(key)
+        clearTimer(key, "savingDelay")
+        clearTimer(key, "transition")
+        clearTimer(key, "savedCleanup")
+        const timers = getTimerEntry(key)
+        const indicator = cellIndicatorsRef.current[key]
+        const runWithMinimum = (task: () => void) => {
+          if (indicator && indicator.status === "saving") {
+            const elapsed = now - indicator.visibleSince
+            const wait = Math.max(0, MIN_SAVING_VISIBLE_MS - elapsed)
+            if (wait > 0) {
+              timers.transition = setTimeout(() => {
+                delete timers.transition
+                task()
+              }, wait)
+              return
+            }
+          }
+          task()
+        }
+
+        if (outcome === "success") {
+          runWithMinimum(() => {
+            if (activeIndicatorKeysRef.current.has(key)) return
+            setCellIndicators((prev) => ({
+              ...prev,
+              [key]: { status: "saved", visibleSince: Date.now() },
+            }))
+            timers.savedCleanup = setTimeout(() => {
+              delete timers.savedCleanup
+              if (activeIndicatorKeysRef.current.has(key)) return
+              removeIndicatorImmediate(key, ["saved"])
+            }, SAVED_VISIBLE_MS)
+          })
+        } else {
+          runWithMinimum(() => {
+            if (activeIndicatorKeysRef.current.has(key)) return
+            removeIndicatorImmediate(key, ["saving"])
+          })
+        }
+      })
+    },
+    [clearTimer, getTimerEntry, removeIndicatorImmediate]
+  )
+
   const handleUpdate = React.useCallback(
     async (
       recordId: string,
@@ -311,6 +470,10 @@ export function DataTable({ lineId }: DataTableProps) {
         })
         return next
       })
+
+      beginCellIndicators(cellKeys)
+
+      let updateSucceeded = false
 
       try {
         const response = await fetch("/api/tables/update", {
@@ -367,6 +530,7 @@ export function DataTable({ lineId }: DataTableProps) {
           })
         }
 
+        updateSucceeded = true
         return true
       } catch (error) {
         const message =
@@ -389,9 +553,10 @@ export function DataTable({ lineId }: DataTableProps) {
           })
           return next
         })
+        finalizeCellIndicators(cellKeys, updateSucceeded ? "success" : "error")
       }
     },
-    [selectedTable]
+    [selectedTable, beginCellIndicators, finalizeCellIndicators]
   )
 
   // ─────────────────────────────────────────────────────────
@@ -460,6 +625,7 @@ export function DataTable({ lineId }: DataTableProps) {
       updatingCells,
       updateErrors,
       selectedTable,
+      cellIndicators,
       clearUpdateError,
       setCommentDraftValue,
       removeCommentDraftValue,
@@ -475,6 +641,7 @@ export function DataTable({ lineId }: DataTableProps) {
       updatingCells,
       updateErrors,
       selectedTable,
+      cellIndicators,
       clearUpdateError,
       setCommentDraftValue,
       removeCommentDraftValue,
@@ -512,6 +679,8 @@ export function DataTable({ lineId }: DataTableProps) {
           const value = isEditing ? draftValue ?? baseValue : baseValue
           const isSaving = Boolean(meta.updatingCells[`${recordId}:comment`])
           const errorMessage = meta.updateErrors[`${recordId}:comment`]
+          const indicator = meta.cellIndicators[`${recordId}:comment`]
+          const indicatorStatus = indicator?.status
 
           const handleSave = async () => {
             const nextValue = draftValue ?? baseValue
@@ -574,7 +743,7 @@ export function DataTable({ lineId }: DataTableProps) {
                     {baseValue.length > 0 ? (
                       baseValue
                     ) : (
-                      <span className="text-muted-foreground">No comment</span>
+                      <span className="text-muted-foreground"></span>
                     )}
                   </div>
                   <Button
@@ -592,10 +761,12 @@ export function DataTable({ lineId }: DataTableProps) {
                   </Button>
                 </>
               )}
-              {isSaving ? (
-                <span className="text-xs text-muted-foreground">Saving…</span>
-              ) : errorMessage ? (
-                <span className="text-xs text-destructive">{errorMessage}</span>
+              {errorMessage ? (
+                <div className="text-xs text-destructive">{errorMessage}</div>
+              ) : indicatorStatus === "saving" ? (
+                <div className="text-xs text-muted-foreground">Saving…</div>
+              ) : indicatorStatus === "saved" ? (
+                <div className="text-xs text-emerald-600">✓</div>
               ) : null}
             </div>
           )
@@ -620,6 +791,8 @@ export function DataTable({ lineId }: DataTableProps) {
           const isChecked = Number(nextValue) === 1
           const isSaving = Boolean(meta.updatingCells[`${recordId}:needtosend`])
           const errorMessage = meta.updateErrors[`${recordId}:needtosend`]
+          const indicator = meta.cellIndicators[`${recordId}:needtosend`]
+          const indicatorStatus = indicator?.status
 
           return (
             <div className="flex flex-col gap-1">
@@ -645,15 +818,17 @@ export function DataTable({ lineId }: DataTableProps) {
                   disabled={isSaving || !meta.selectedTable}
                   aria-label="Toggle need to send"
                 />
-                <span className="text-xs text-muted-foreground">
+                <div className="text-xs text-muted-foreground flex flex-row items-center gap-1">
                   {isChecked ? "Yes" : "No"}
-                </span>
-              </div>
-              {isSaving ? (
-                <span className="text-xs text-muted-foreground">Saving…</span>
-              ) : errorMessage ? (
-                <span className="text-xs text-destructive">{errorMessage}</span>
-              ) : null}
+                {errorMessage ? (
+                  <div className="text-xs text-destructive">{errorMessage}</div>
+                ) : indicatorStatus === "saving" ? (
+                  <div className="text-xs text-muted-foreground">...</div>
+                ) : indicatorStatus === "saved" ? (
+                  <div className="text-xs text-emerald-600">✓</div>
+                ) : null}
+                  </div>
+                </div>
             </div>
           )
         }
