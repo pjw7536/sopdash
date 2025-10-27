@@ -4,7 +4,7 @@ import * as React from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import { useIsMobile } from "@/hooks/use-mobile"
-import type { LineTrendPoint } from "@/lib/lines"
+import type { LineTrendPoint } from "../types"
 import {
   ChartConfig,
   ChartContainer,
@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-type ChartAreaInteractiveProps = {
+type LineActivityChartProps = {
   lineId: string
   trend: LineTrendPoint[]
 }
@@ -37,7 +37,7 @@ const chartConfig = {
 
 const numberFormatter = new Intl.NumberFormat()
 
-export function ChartAreaInteractive({ lineId, trend }: ChartAreaInteractiveProps) {
+export function LineActivityChart({ lineId, trend }: LineActivityChartProps) {
   const isMobile = useIsMobile()
   const [timeRange, setTimeRange] = React.useState<"90d" | "30d" | "7d">("90d")
 

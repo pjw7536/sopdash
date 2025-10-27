@@ -2,14 +2,16 @@ import * as React from "react"
 import { notFound } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
-import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-import { SectionCards } from "@/components/section-cards"
 import { SiteHeader } from "@/components/site-header"
 import {
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar"
-import { getLineDashboard } from "@/lib/lines"
+import {
+  LineActivityChart,
+  LineSummaryCards,
+} from "@/features/line-dashboard/components"
+import { getLineDashboard } from "@/features/line-dashboard/api"
 
 type LineDashboardPageProps = {
   params: Promise<{
@@ -41,8 +43,8 @@ export default async function LineDashboardPage({ params }: LineDashboardPagePro
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-4 py-4 md:gap-4 md:py-4">
-              <SectionCards lineId={dashboard.lineId} summary={dashboard.summary} trend={dashboard.trend} />
-              <ChartAreaInteractive lineId={dashboard.lineId} trend={dashboard.trend} />
+              <LineSummaryCards lineId={dashboard.lineId} summary={dashboard.summary} trend={dashboard.trend} />
+              <LineActivityChart lineId={dashboard.lineId} trend={dashboard.trend} />
             </div>
           </div>
         </div>

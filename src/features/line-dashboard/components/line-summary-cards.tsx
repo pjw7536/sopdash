@@ -14,9 +14,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import type { LineSummary, LineTrendPoint } from "@/lib/lines"
+import type { LineSummary, LineTrendPoint } from "../types"
 
-type SectionCardsProps = {
+type LineSummaryCardsProps = {
   lineId: string
   summary: LineSummary
   trend: LineTrendPoint[]
@@ -29,7 +29,7 @@ const formatDelta = (delta: number) => {
   return delta > 0 ? `+${numberFormatter.format(delta)}` : numberFormatter.format(delta)
 }
 
-export function SectionCards({ lineId, summary, trend }: SectionCardsProps) {
+export function LineSummaryCards({ lineId, summary, trend }: LineSummaryCardsProps) {
   const sortedTrend = [...trend].sort((a, b) => a.date.localeCompare(b.date))
   const latestPoint = sortedTrend.at(-1)
   const previousPoint = sortedTrend.at(-2)
