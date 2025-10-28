@@ -38,10 +38,10 @@ import {
 } from "@/components/ui/table"
 
 import {
-  MAX_LIMIT,
-  clampLimit,
+  dateFormatter,
   numberFormatter,
   timeFormatter,
+  toDateInputValue,
 } from "./constants"
 import { createColumnDefs } from "./column-defs"
 import { createGlobalFilterFn } from "./global-filter"
@@ -58,9 +58,9 @@ export function DataTable({ lineId }: DataTableProps) {
     setSelectedTable,
     columns,
     rows,
-    limit,
-    setLimit,
-    appliedLimit,
+    since,
+    setSince,
+    appliedSince,
     filter,
     setFilter,
     sorting,
@@ -116,9 +116,11 @@ export function DataTable({ lineId }: DataTableProps) {
           </div>
           <p className="text-sm text-muted-foreground">
             {selectedTable
-              ? `Loaded ${numberFormatter.format(totalLoaded)} rows (limit ${numberFormatter.format(
-                  appliedLimit
-                )})`
+              ? `Loaded ${numberFormatter.format(totalLoaded)} rows (since ${
+                  appliedSince
+                    ? dateFormatter.format(new Date(`${appliedSince}T00:00:00Z`))
+                    : "all time"
+                })`
               : "Select a table to inspect its rows."}
           </p>
         </div>
@@ -157,16 +159,12 @@ export function DataTable({ lineId }: DataTableProps) {
           </Select>
 
           <Input
-            type="number"
-            min={1}
-            max={MAX_LIMIT}
-            value={limit}
-            onChange={(event) => {
-              const next = Number.parseInt(event.target.value, 10)
-              if (!Number.isNaN(next)) setLimit(clampLimit(next))
-            }}
-            className="w-full sm:w-28"
-            aria-label="Row limit"
+            type="date"
+            max={toDateInputValue(new Date())}
+            value={since}
+            onChange={(event) => setSince(event.target.value)}
+            className="w-full sm:w-40"
+            aria-label="Since date"
           />
 
           <Button variant="outline" onClick={() => void fetchRows()} disabled={isLoadingRows || !selectedTable}>
@@ -266,7 +264,9 @@ export function DataTable({ lineId }: DataTableProps) {
 
       <div className="flex flex-wrap items-center gap-1 justify-end text-xs text-muted-foreground">
         <Badge variant="outline">{numberFormatter.format(lastFetchedCount)} fetched</Badge>
-        <Badge variant="outline">Limit {numberFormatter.format(appliedLimit)}</Badge>
+        <Badge variant="outline">
+          Since {appliedSince ? dateFormatter.format(new Date(`${appliedSince}T00:00:00Z`)) : "all time"}
+        </Badge>
         <span>Updated {isLoadingRows ? "just now" : lastUpdatedLabel ?? "just now"}</span>
       </div>
     </section>

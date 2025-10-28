@@ -3,7 +3,7 @@
 import * as React from "react"
 import type { SortingState } from "@tanstack/react-table"
 
-import { DEFAULT_LIMIT, DEFAULT_TABLE } from "./constants"
+import { DEFAULT_TABLE, getDefaultSinceValue } from "./constants"
 import type { DataTableMeta, HandleUpdateFn, TableOption } from "./types"
 import { tableDataSchema, tablesResponseSchema } from "./types"
 import { useCellIndicators } from "./use-cell-indicators"
@@ -18,9 +18,9 @@ type UseDataTableReturn = {
   setSelectedTable: React.Dispatch<React.SetStateAction<string>>
   columns: string[]
   rows: Array<Record<string, unknown>>
-  limit: number
-  setLimit: React.Dispatch<React.SetStateAction<number>>
-  appliedLimit: number
+  since: string
+  setSince: React.Dispatch<React.SetStateAction<string>>
+  appliedSince: string | null
   filter: string
   setFilter: React.Dispatch<React.SetStateAction<string>>
   sorting: SortingState
@@ -74,8 +74,10 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
   const [selectedTable, setSelectedTable] = React.useState<string>("")
   const [columns, setColumns] = React.useState<string[]>([])
   const [rows, setRows] = React.useState<Array<Record<string, unknown>>>([])
-  const [limit, setLimit] = React.useState<number>(DEFAULT_LIMIT)
-  const [appliedLimit, setAppliedLimit] = React.useState<number>(DEFAULT_LIMIT)
+  const [since, setSince] = React.useState<string>(() => getDefaultSinceValue())
+  const [appliedSince, setAppliedSince] = React.useState<string | null>(
+    () => getDefaultSinceValue()
+  )
   const [filter, setFilter] = React.useState("")
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [commentDrafts, setCommentDrafts] = React.useState<Record<string, string>>({})
@@ -141,7 +143,8 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
     setRowsError(null)
 
     try {
-      const params = new URLSearchParams({ table: selectedTable, limit: String(limit) })
+      const effectiveSince = since && since.length > 0 ? since : getDefaultSinceValue()
+      const params = new URLSearchParams({ table: selectedTable, since: effectiveSince })
       if (lineId) params.set("lineId", lineId)
 
       const response = await fetch(`/api/tables?${params.toString()}`, { cache: "no-store" })
@@ -165,12 +168,18 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
       if (!parsed.success) throw new Error("Received unexpected data from server")
       if (rowsRequestRef.current !== requestId) return
 
-      const { columns: fetchedColumns, rows: fetchedRows, rowCount, limit: applied, table } = parsed.data
+      const {
+        columns: fetchedColumns,
+        rows: fetchedRows,
+        rowCount,
+        since: applied,
+        table,
+      } = parsed.data
 
       setColumns(fetchedColumns)
       setRows(fetchedRows)
       setLastFetchedCount(rowCount)
-      setAppliedLimit(applied)
+      setAppliedSince(applied)
       setCommentDrafts({})
       setCommentEditing({})
       setNeedToSendDrafts({})
@@ -188,7 +197,7 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
     } finally {
       if (rowsRequestRef.current === requestId) setIsLoadingRows(false)
     }
-  }, [limit, selectedTable, lineId])
+  }, [since, selectedTable, lineId])
 
   React.useEffect(() => {
     void fetchTables()
@@ -392,9 +401,9 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
     setSelectedTable,
     columns,
     rows,
-    limit,
-    setLimit,
-    appliedLimit,
+    since,
+    setSince,
+    appliedSince,
     filter,
     setFilter,
     sorting,
