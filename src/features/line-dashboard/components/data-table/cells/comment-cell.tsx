@@ -1,6 +1,14 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 import type { DataTableMeta } from "../types"
 
@@ -39,10 +47,50 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
     meta.clearUpdateError(`${recordId}:comment`)
   }
 
+  const renderStatusMessage = () => {
+    if (errorMessage) {
+      return <div className="text-xs text-destructive">{errorMessage}</div>
+    }
+    if (indicatorStatus === "saving") {
+      return <div className="text-xs text-muted-foreground">Saving…</div>
+    }
+    if (indicatorStatus === "saved") {
+      return <div className="text-xs text-emerald-600">✓</div>
+    }
+    return null
+  }
+
   return (
     <div className="flex flex-col gap-1">
-      {isEditing ? (
-        <>
+      <Dialog
+        open={isEditing}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) {
+            meta.setCommentDraftValue(recordId, baseValue)
+            meta.setCommentEditingState(recordId, true)
+          } else {
+            meta.setCommentEditingState(recordId, false)
+            meta.removeCommentDraftValue(recordId)
+          }
+          meta.clearUpdateError(`${recordId}:comment`)
+        }}
+      >
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            className="whitespace-pre-wrap break-words rounded-md border border-transparent px-2 py-1 text-left text-sm transition-colors hover:border-border hover:bg-muted focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {baseValue.length > 0 ? (
+              baseValue
+            ) : (
+              <span className="text-muted-foreground">Tap to add a comment</span>
+            )}
+          </button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit comment</DialogTitle>
+          </DialogHeader>
           <textarea
             value={value}
             disabled={isSaving}
@@ -51,12 +99,13 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
               meta.setCommentDraftValue(recordId, nextValue)
               meta.clearUpdateError(`${recordId}:comment`)
             }}
-            className="min-h-[3rem] resize-y rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+            className="min-h-[6rem] resize-y rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
             aria-label="Edit comment"
+            autoFocus
           />
-          <div className="flex items-center gap-2">
+          {renderStatusMessage()}
+          <DialogFooter>
             <Button
-              size="sm"
               onClick={() => {
                 void handleSave()
               }}
@@ -64,37 +113,13 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
             >
               Save
             </Button>
-            <Button size="sm" variant="outline" onClick={handleCancel} disabled={isSaving}>
+            <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
               Cancel
             </Button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="whitespace-pre-wrap break-words text-sm">
-            {baseValue.length > 0 ? baseValue : <span className="text-muted-foreground"></span>}
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-fit"
-            onClick={() => {
-              meta.setCommentDraftValue(recordId, baseValue)
-              meta.setCommentEditingState(recordId, true)
-              meta.clearUpdateError(`${recordId}:comment`)
-            }}
-          >
-            Edit
-          </Button>
-        </>
-      )}
-      {errorMessage ? (
-        <div className="text-xs text-destructive">{errorMessage}</div>
-      ) : indicatorStatus === "saving" ? (
-        <div className="text-xs text-muted-foreground">Saving…</div>
-      ) : indicatorStatus === "saved" ? (
-        <div className="text-xs text-emerald-600">✓</div>
-      ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {!isEditing ? renderStatusMessage() : null}
     </div>
   )
 }
