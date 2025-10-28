@@ -1,5 +1,9 @@
 "use client"
 
+import * as React from "react"
+
+import { CheckIcon } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -26,6 +30,50 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
   const errorMessage = meta.updateErrors[`${recordId}:comment`]
   const indicator = meta.cellIndicators[`${recordId}:comment`]
   const indicatorStatus = indicator?.status
+  const [showSuccessIndicator, setShowSuccessIndicator] = React.useState(false)
+  const successDismissTimerRef = React.useRef<number | null>(null)
+
+  React.useEffect(() => {
+    if (!isEditing) {
+      setShowSuccessIndicator(false)
+      return
+    }
+
+    if (indicatorStatus === "saving") {
+      setShowSuccessIndicator(false)
+      return
+    }
+
+    if (indicatorStatus === "saved") {
+      setShowSuccessIndicator(true)
+      if (successDismissTimerRef.current) {
+        window.clearTimeout(successDismissTimerRef.current)
+      }
+      successDismissTimerRef.current = window.setTimeout(() => {
+        meta.setCommentEditingState(recordId, false)
+        meta.removeCommentDraftValue(recordId)
+        meta.clearUpdateError(`${recordId}:comment`)
+        setShowSuccessIndicator(false)
+        successDismissTimerRef.current = null
+      }, 800)
+    }
+
+    return () => {
+      if (successDismissTimerRef.current) {
+        window.clearTimeout(successDismissTimerRef.current)
+        successDismissTimerRef.current = null
+      }
+    }
+  }, [indicatorStatus, isEditing, meta, recordId])
+
+  const handleOpen = () => {
+    if (!meta.selectedTable) {
+      return
+    }
+    meta.setCommentDraftValue(recordId, baseValue)
+    meta.setCommentEditingState(recordId, true)
+    meta.clearUpdateError(`${recordId}:comment`)
+  }
 
   const handleSave = async () => {
     const nextValue = draftValue ?? baseValue
@@ -38,10 +86,14 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
     if (!success) {
       return
     }
-    meta.setCommentEditingState(recordId, false)
   }
 
   const handleCancel = () => {
+    if (successDismissTimerRef.current) {
+      window.clearTimeout(successDismissTimerRef.current)
+      successDismissTimerRef.current = null
+    }
+    setShowSuccessIndicator(false)
     meta.setCommentEditingState(recordId, false)
     meta.removeCommentDraftValue(recordId)
     meta.clearUpdateError(`${recordId}:comment`)
