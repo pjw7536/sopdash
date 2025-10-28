@@ -2,8 +2,6 @@
 
 import * as React from "react"
 
-import { CheckIcon } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -66,15 +64,6 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
     }
   }, [indicatorStatus, isEditing, meta, recordId])
 
-  const handleOpen = () => {
-    if (!meta.selectedTable) {
-      return
-    }
-    meta.setCommentDraftValue(recordId, baseValue)
-    meta.setCommentEditingState(recordId, true)
-    meta.clearUpdateError(`${recordId}:comment`)
-  }
-
   const handleSave = async () => {
     const nextValue = draftValue ?? baseValue
     if (nextValue === baseValue) {
@@ -99,15 +88,15 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
     meta.clearUpdateError(`${recordId}:comment`)
   }
 
-  const renderStatusMessage = () => {
+  const renderDialogStatusMessage = () => {
     if (errorMessage) {
       return <div className="text-xs text-destructive">{errorMessage}</div>
     }
     if (indicatorStatus === "saving") {
       return <div className="text-xs text-muted-foreground">Saving…</div>
     }
-    if (indicatorStatus === "saved") {
-      return <div className="text-xs text-emerald-600">✓</div>
+    if (indicatorStatus === "saved" && showSuccessIndicator) {
+      return <div className="text-xs text-emerald-600">Saved</div>
     }
     return null
   }
@@ -155,7 +144,7 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
             aria-label="Edit comment"
             autoFocus
           />
-          {renderStatusMessage()}
+          {renderDialogStatusMessage()}
           <DialogFooter>
             <Button
               onClick={() => {
@@ -171,7 +160,7 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {!isEditing ? renderStatusMessage() : null}
+      {/* Intentionally no inline status indicator. Status is shown within the dialog. */}
     </div>
   )
 }
