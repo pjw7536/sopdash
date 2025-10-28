@@ -4,13 +4,38 @@ import { cn } from "@/lib/utils"
 
 import { STEP_COLUMN_KEY_SET } from "./constants"
 
+function formatShortDateTime(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  const hours = String(date.getHours()).padStart(2, "0")
+  const minutes = String(date.getMinutes()).padStart(2, "0")
+  return `${month}/${day} ${hours}:${minutes}`
+}
+
+function tryParseDate(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (trimmed.length === 0) return null
+    const looksLikeDateTime = /\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}/.test(trimmed)
+    const looksLikeDateOnly = /\d{4}-\d{2}-\d{2}$/.test(trimmed)
+    if (!looksLikeDateTime && !looksLikeDateOnly) return null
+    const parsed = new Date(trimmed)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  return null
+}
+
 export function formatCellValue(value: unknown) {
   if (value === null || value === undefined) {
     return <span className="text-muted-foreground">NULL</span>
   }
   if (typeof value === "boolean") return value ? "TRUE" : "FALSE"
   if (typeof value === "number" || typeof value === "bigint") return value.toString()
-  if (value instanceof Date) return value.toISOString()
+  const parsedDate = tryParseDate(value)
+  if (parsedDate) return formatShortDateTime(parsedDate)
   if (typeof value === "string") {
     if (value.length === 0) {
       return <span className="text-muted-foreground">{"\"\""}</span>
@@ -29,10 +54,14 @@ export function formatCellValue(value: unknown) {
 
 export function searchableValue(value: unknown) {
   if (value === null || value === undefined) return ""
+  const parsedDate = tryParseDate(value)
+  if (parsedDate) {
+    const formatted = formatShortDateTime(parsedDate)
+    return `${formatted} ${parsedDate.toISOString()}`.toLowerCase()
+  }
   if (typeof value === "string") return value.toLowerCase()
   if (typeof value === "number" || typeof value === "bigint") return value.toString().toLowerCase()
   if (typeof value === "boolean") return value ? "true" : "false"
-  if (value instanceof Date) return value.toISOString().toLowerCase()
   try {
     return JSON.stringify(value).toLowerCase()
   } catch {
