@@ -22,13 +22,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -53,9 +46,7 @@ type DataTableProps = {
 
 export function DataTable({ lineId }: DataTableProps) {
   const {
-    tables,
     selectedTable,
-    setSelectedTable,
     columns,
     rows,
     since,
@@ -65,9 +56,7 @@ export function DataTable({ lineId }: DataTableProps) {
     setFilter,
     sorting,
     setSorting,
-    isLoadingTables,
     isLoadingRows,
-    tableListError,
     rowsError,
     lastFetchedCount,
     fetchRows,
@@ -99,12 +88,15 @@ export function DataTable({ lineId }: DataTableProps) {
   const emptyStateColSpan = Math.max(table.getVisibleLeafColumns().length, 1)
   const totalLoaded = rows.length
   const hasNoRows = !isLoadingRows && rowsError === null && columns.length === 0
+  const sinceLabel = appliedSince
+    ? dateFormatter.format(new Date(`${appliedSince}T00:00:00Z`))
+    : "all time"
   const [lastUpdatedLabel, setLastUpdatedLabel] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (isLoadingRows) return
     setLastUpdatedLabel(timeFormatter.format(new Date()))
-  }, [isLoadingRows, timeFormatter])
+  }, [isLoadingRows])
 
   return (
     <section className="flex flex-col gap-2 px-4 lg:px-6">
@@ -115,13 +107,7 @@ export function DataTable({ lineId }: DataTableProps) {
             데이터 테이블 · {lineId}
           </div>
           <p className="text-sm text-muted-foreground">
-            {selectedTable
-              ? `Loaded ${numberFormatter.format(totalLoaded)} rows (since ${
-                  appliedSince
-                    ? dateFormatter.format(new Date(`${appliedSince}T00:00:00Z`))
-                    : "all time"
-                })`
-              : "Select a table to inspect its rows."}
+            Loaded {numberFormatter.format(totalLoaded)} rows from {selectedTable} (since {sinceLabel}).
           </p>
         </div>
       </div>
@@ -136,28 +122,6 @@ export function DataTable({ lineId }: DataTableProps) {
         />
 
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <Select
-            value={selectedTable}
-            onValueChange={(value) => setSelectedTable(value)}
-            disabled={isLoadingTables || tables.length === 0}
-          >
-            <SelectTrigger id="table-selector" className="w-full sm:w-64" aria-label="Select database table">
-              <SelectValue placeholder="Select a table" />
-            </SelectTrigger>
-            <SelectContent>
-              {tables.map((tableOption) => (
-                <SelectItem key={tableOption.fullName} value={tableOption.fullName}>
-                  <div className="flex flex-col">
-                    <span>{tableOption.name}</span>
-                    {tableOption.schema ? (
-                      <span className="text-xs text-muted-foreground">{tableOption.schema}</span>
-                    ) : null}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <Input
             type="date"
             max={toDateInputValue(new Date())}
@@ -167,19 +131,12 @@ export function DataTable({ lineId }: DataTableProps) {
             aria-label="Since date"
           />
 
-          <Button variant="outline" onClick={() => void fetchRows()} disabled={isLoadingRows || !selectedTable}>
+          <Button variant="outline" onClick={() => void fetchRows()} disabled={isLoadingRows}>
             {isLoadingRows ? <IconLoader className="mr-2 size-4 animate-spin" /> : <IconReload className="mr-2 size-4" />}
             Refresh
           </Button>
         </div>
       </div>
-
-      {tableListError ? (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <IconAlertCircle className="size-5 shrink-0" />
-          <span>{tableListError}</span>
-        </div>
-      ) : null}
 
       {rowsError ? (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -239,7 +196,7 @@ export function DataTable({ lineId }: DataTableProps) {
               ) : hasNoRows ? (
                 <TableRow>
                   <TableCell colSpan={emptyStateColSpan} className="h-24 text-center text-sm text-muted-foreground">
-                    No rows returned for the selected table.
+                    No rows returned.
                   </TableCell>
                 </TableRow>
               ) : table.getRowModel().rows.length === 0 ? (

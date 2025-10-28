@@ -1,15 +1,5 @@
 import { z } from "zod"
 
-export const tableOptionSchema = z.object({
-  schema: z.string().nullable(),
-  name: z.string(),
-  fullName: z.string(),
-})
-
-export const tablesResponseSchema = z.object({
-  tables: z.array(tableOptionSchema),
-})
-
 export const tableDataSchema = z.object({
   table: z.string(),
   since: z.string().nullable(),
@@ -17,8 +7,6 @@ export const tableDataSchema = z.object({
   columns: z.array(z.string()),
   rows: z.array(z.record(z.string(), z.unknown())),
 })
-
-export type TableOption = z.infer<typeof tableOptionSchema>
 
 export type HandleUpdateFn = (
   recordId: string,
@@ -45,7 +33,6 @@ export type DataTableMeta = {
   needToSendDrafts: Record<string, number>
   updatingCells: Record<string, boolean>
   updateErrors: Record<string, string>
-  selectedTable: string
   cellIndicators: Record<string, CellIndicator>
   clearUpdateError: (key: string) => void
   setCommentDraftValue: (recordId: string, value: string) => void
