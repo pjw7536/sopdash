@@ -99,6 +99,12 @@ export function DataTable({ lineId }: DataTableProps) {
   const emptyStateColSpan = Math.max(table.getVisibleLeafColumns().length, 1)
   const totalLoaded = rows.length
   const hasNoRows = !isLoadingRows && rowsError === null && columns.length === 0
+  const [lastUpdatedLabel, setLastUpdatedLabel] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (isLoadingRows) return
+    setLastUpdatedLabel(timeFormatter.format(new Date()))
+  }, [isLoadingRows, timeFormatter])
 
   return (
     <section className="flex flex-col gap-2 px-4 lg:px-6">
@@ -261,7 +267,7 @@ export function DataTable({ lineId }: DataTableProps) {
       <div className="flex flex-wrap items-center gap-1 justify-end text-xs text-muted-foreground">
         <Badge variant="outline">{numberFormatter.format(lastFetchedCount)} fetched</Badge>
         <Badge variant="outline">Limit {numberFormatter.format(appliedLimit)}</Badge>
-        <span>Updated {isLoadingRows ? "just now" : timeFormatter.format(new Date())}</span>
+        <span>Updated {isLoadingRows ? "just now" : lastUpdatedLabel ?? "just now"}</span>
       </div>
     </section>
   )
