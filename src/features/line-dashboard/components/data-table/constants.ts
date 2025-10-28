@@ -1,6 +1,15 @@
 export const DEFAULT_TABLE = "drone_sop_v3"
-export const DEFAULT_LIMIT = 200
-export const MAX_LIMIT = 1000
+export const DEFAULT_SINCE_DAYS = 3
+
+const DAY_IN_MS = 86_400_000
+
+export const toDateInputValue = (date: Date) => date.toISOString().split("T")[0]!
+
+export const getDefaultSinceValue = () => {
+  const now = new Date()
+  const since = new Date(now.getTime() - DEFAULT_SINCE_DAYS * DAY_IN_MS)
+  return toDateInputValue(since)
+}
 
 export const SAVING_DELAY_MS = 180
 export const MIN_SAVING_VISIBLE_MS = 500
@@ -24,4 +33,8 @@ export const timeFormatter = new Intl.DateTimeFormat(undefined, {
   second: "2-digit",
 })
 
-export const clampLimit = (value: number) => Math.min(Math.max(Math.trunc(value), 1), MAX_LIMIT)
+export const dateFormatter = new Intl.DateTimeFormat(undefined, {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})

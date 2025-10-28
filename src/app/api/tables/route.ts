@@ -14,8 +14,8 @@ const EXCLUDED_SCHEMAS = [
 ]
 
 const IDENTIFIER_PART_REGEX = /^[A-Za-z0-9_]+$/
-const DEFAULT_LIMIT = 200
-const MAX_LIMIT = 1000
+const DEFAULT_SINCE_DAYS = 3
+const FALLBACK_ROW_LIMIT = 200
 
 type TableListRow = {
   tableSchema: string | null
@@ -74,18 +74,32 @@ function isUnknownColumnError(error: unknown): error is MysqlError {
   )
 }
 
-function parseLimit(rawLimit: string | null) {
-  if (!rawLimit) {
-    return DEFAULT_LIMIT
+function subtractDays(date: Date, days: number) {
+  const next = new Date(date)
+  next.setDate(next.getDate() - days)
+  return next
+}
+
+function formatDateOnly(date: Date) {
+  return date.toISOString().split("T")[0]!
+}
+
+function parseSince(rawSince: string | null) {
+  const fallback = formatDateOnly(subtractDays(new Date(), DEFAULT_SINCE_DAYS))
+
+  if (!rawSince) {
+    return fallback
   }
 
-  const parsed = Number.parseInt(rawLimit, 10)
-
-  if (Number.isNaN(parsed) || parsed < 1) {
-    return DEFAULT_LIMIT
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rawSince)) {
+    return fallback
   }
 
-  return Math.min(parsed, MAX_LIMIT)
+  return rawSince
+}
+
+function toMySqlDateTime(dateOnly: string) {
+  return `${dateOnly} 00:00:00`
 }
 
 async function fetchTableList({
@@ -146,32 +160,59 @@ export async function GET(request: Request) {
       return NextResponse.json({ tables })
     }
 
-    const limit = parseLimit(url.searchParams.get("limit"))
+    const since = parseSince(url.searchParams.get("since"))
+    const sinceDateTime = toMySqlDateTime(since)
     const identifierParts = sanitizeTableIdentifier(table)
     const placeholder = buildTablePlaceholder(identifierParts)
 
     const hasLineFilter = typeof lineId === "string" && lineId.length > 0
     const baseParams: unknown[] = [...identifierParts]
     let appliedLineId: string | null = null
+    let appliedSince: string | null = since
     let rows: Array<Record<string, unknown>>
 
     try {
-      const filterClause = hasLineFilter ? " WHERE line_id = ? " : " "
-      const params = hasLineFilter
-        ? [...baseParams, lineId!, limit]
-        : [...baseParams, limit]
+      const filters: string[] = ["created_at >= ?"]
+      const params = [...baseParams, sinceDateTime]
+
+      if (hasLineFilter) {
+        filters.push("line_id = ?")
+        params.push(lineId!)
+      }
+
+      const whereClause = ` WHERE ${filters.join(" AND ")} `
       rows = await runQuery<Array<Record<string, unknown>>>(
-        `SELECT * FROM ${placeholder}${filterClause}LIMIT ?`,
+        `SELECT * FROM ${placeholder}${whereClause}ORDER BY created_at DESC`,
         params
       )
       appliedLineId = hasLineFilter ? lineId! : null
     } catch (error) {
       if (hasLineFilter && isUnknownColumnError(error)) {
+        try {
+          rows = await runQuery<Array<Record<string, unknown>>>(
+            `SELECT * FROM ${placeholder} WHERE created_at >= ? ORDER BY created_at DESC`,
+            [...baseParams, sinceDateTime]
+          )
+          appliedLineId = null
+        } catch (innerError) {
+          if (isUnknownColumnError(innerError)) {
+            rows = await runQuery<Array<Record<string, unknown>>>(
+              `SELECT * FROM ${placeholder} LIMIT ?`,
+              [...baseParams, FALLBACK_ROW_LIMIT]
+            )
+            appliedLineId = null
+            appliedSince = null
+          } else {
+            throw innerError
+          }
+        }
+      } else if (isUnknownColumnError(error)) {
         rows = await runQuery<Array<Record<string, unknown>>>(
           `SELECT * FROM ${placeholder} LIMIT ?`,
-          [...baseParams, limit]
+          [...baseParams, FALLBACK_ROW_LIMIT]
         )
-        appliedLineId = null
+        appliedLineId = hasLineFilter ? null : appliedLineId
+        appliedSince = null
       } else {
         throw error
       }
@@ -183,7 +224,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       table: identifierParts.join("."),
-      limit,
+      since: appliedSince,
       rowCount: normalizedRows.length,
       columns,
       rows: normalizedRows,

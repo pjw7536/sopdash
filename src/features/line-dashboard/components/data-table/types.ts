@@ -12,7 +12,7 @@ export const tablesResponseSchema = z.object({
 
 export const tableDataSchema = z.object({
   table: z.string(),
-  limit: z.number(),
+  since: z.string().nullable(),
   rowCount: z.number(),
   columns: z.array(z.string()),
   rows: z.array(z.record(z.string(), z.unknown())),
