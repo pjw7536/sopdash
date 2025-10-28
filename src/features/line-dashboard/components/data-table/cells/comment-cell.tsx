@@ -45,7 +45,7 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
         <>
           <textarea
             value={value}
-            disabled={isSaving || !meta.selectedTable}
+            disabled={isSaving}
             onChange={(event) => {
               const nextValue = event.target.value
               meta.setCommentDraftValue(recordId, nextValue)
@@ -60,7 +60,7 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
               onClick={() => {
                 void handleSave()
               }}
-              disabled={isSaving || !meta.selectedTable}
+              disabled={isSaving}
             >
               Save
             </Button>
@@ -83,7 +83,6 @@ export function CommentCell({ meta, recordId, baseValue }: CommentCellProps) {
               meta.setCommentEditingState(recordId, true)
               meta.clearUpdateError(`${recordId}:comment`)
             }}
-            disabled={!meta.selectedTable}
           >
             Edit
           </Button>

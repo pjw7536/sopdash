@@ -4,8 +4,8 @@ import * as React from "react"
 import type { SortingState } from "@tanstack/react-table"
 
 import { DEFAULT_TABLE, getDefaultSinceValue } from "./constants"
-import type { DataTableMeta, HandleUpdateFn, TableOption } from "./types"
-import { tableDataSchema, tablesResponseSchema } from "./types"
+import type { DataTableMeta, HandleUpdateFn } from "./types"
+import { tableDataSchema } from "./types"
 import { useCellIndicators } from "./use-cell-indicators"
 
 type UseDataTableArgs = {
@@ -13,9 +13,7 @@ type UseDataTableArgs = {
 }
 
 type UseDataTableReturn = {
-  tables: TableOption[]
   selectedTable: string
-  setSelectedTable: React.Dispatch<React.SetStateAction<string>>
   columns: string[]
   rows: Array<Record<string, unknown>>
   since: string
@@ -25,9 +23,7 @@ type UseDataTableReturn = {
   setFilter: React.Dispatch<React.SetStateAction<string>>
   sorting: SortingState
   setSorting: React.Dispatch<React.SetStateAction<SortingState>>
-  isLoadingTables: boolean
   isLoadingRows: boolean
-  tableListError: string | null
   rowsError: string | null
   lastFetchedCount: number
   fetchRows: () => Promise<void>
@@ -53,25 +49,8 @@ function removeKey<TValue>(record: Record<string, TValue>, key: string) {
   return next
 }
 
-function pickPreferredTable(options: TableOption[], previous: string) {
-  if (options.length === 0) return ""
-
-  const byFullName = options.find((option) => option.fullName === previous)
-  if (byFullName) return byFullName.fullName
-
-  const byName = options.find((option) => option.name === previous)
-  if (byName) return byName.fullName
-
-  const preferred =
-    options.find((option) => option.fullName === DEFAULT_TABLE || option.name === DEFAULT_TABLE) ??
-    options[0]
-
-  return preferred.fullName
-}
-
 export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableReturn {
-  const [tables, setTables] = React.useState<TableOption[]>([])
-  const [selectedTable, setSelectedTable] = React.useState<string>("")
+  const [selectedTable, setSelectedTable] = React.useState<string>(DEFAULT_TABLE)
   const [columns, setColumns] = React.useState<string[]>([])
   const [rows, setRows] = React.useState<Array<Record<string, unknown>>>([])
   const [since, setSince] = React.useState<string>(() => getDefaultSinceValue())
@@ -85,59 +64,14 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
   const [needToSendDrafts, setNeedToSendDrafts] = React.useState<Record<string, number>>({})
   const [updatingCells, setUpdatingCells] = React.useState<Record<string, boolean>>({})
   const [updateErrors, setUpdateErrors] = React.useState<Record<string, string>>({})
-  const [isLoadingTables, setIsLoadingTables] = React.useState(false)
   const [isLoadingRows, setIsLoadingRows] = React.useState(false)
-  const [tableListError, setTableListError] = React.useState<string | null>(null)
   const [rowsError, setRowsError] = React.useState<string | null>(null)
   const [lastFetchedCount, setLastFetchedCount] = React.useState(0)
 
-  const tablesRequestRef = React.useRef(0)
   const rowsRequestRef = React.useRef(0)
   const { cellIndicators, begin, finalize } = useCellIndicators()
 
-  const fetchTables = React.useCallback(async () => {
-    const requestId = ++tablesRequestRef.current
-    setIsLoadingTables(true)
-    setTableListError(null)
-
-    try {
-      const response = await fetch("/api/tables", { cache: "no-store" })
-      if (!response.ok) throw new Error(`Request failed with status ${response.status}`)
-
-      const json = await response.json()
-      const parsed = tablesResponseSchema.safeParse(json)
-      if (!parsed.success) throw new Error("Received unexpected data from server")
-      if (tablesRequestRef.current !== requestId) return
-
-      const nextTables = parsed.data.tables
-      setTables(nextTables)
-
-      setSelectedTable((previous) => {
-        if (!previous) {
-          return pickPreferredTable(nextTables, DEFAULT_TABLE)
-        }
-        return pickPreferredTable(nextTables, previous)
-      })
-    } catch (error) {
-      if (tablesRequestRef.current !== requestId) return
-      const message = error instanceof Error ? error.message : "Failed to load table list"
-      setTableListError(message)
-      setTables([])
-      setSelectedTable("")
-    } finally {
-      if (tablesRequestRef.current === requestId) setIsLoadingTables(false)
-    }
-  }, [])
-
   const fetchRows = React.useCallback(async () => {
-    if (!selectedTable) {
-      setColumns([])
-      setRows([])
-      setRowsError(null)
-      setLastFetchedCount(0)
-      return
-    }
-
     const requestId = ++rowsRequestRef.current
     setIsLoadingRows(true)
     setRowsError(null)
@@ -200,10 +134,6 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
   }, [since, selectedTable, lineId])
 
   React.useEffect(() => {
-    void fetchTables()
-  }, [fetchTables])
-
-  React.useEffect(() => {
     void fetchRows()
   }, [fetchRows])
 
@@ -215,16 +145,6 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
     async (recordId, updates) => {
       const fields = Object.keys(updates) as Array<"comment" | "needtosend">
       if (!recordId || fields.length === 0) return false
-      if (!selectedTable) {
-        fields.forEach((field) => {
-          const key = `${recordId}:${field}`
-          setUpdateErrors((prev) => ({
-            ...prev,
-            [key]: "Select a table before editing.",
-          }))
-        })
-        return false
-      }
 
       const cellKeys = fields.map((field) => `${recordId}:${field}`)
 
@@ -367,7 +287,6 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
       needToSendDrafts,
       updatingCells,
       updateErrors,
-      selectedTable,
       cellIndicators,
       clearUpdateError,
       setCommentDraftValue,
@@ -383,7 +302,6 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
       needToSendDrafts,
       updatingCells,
       updateErrors,
-      selectedTable,
       cellIndicators,
       clearUpdateError,
       setCommentDraftValue,
@@ -396,9 +314,7 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
   )
 
   return {
-    tables,
     selectedTable,
-    setSelectedTable,
     columns,
     rows,
     since,
@@ -408,9 +324,7 @@ export function useDataTableState({ lineId }: UseDataTableArgs): UseDataTableRet
     setFilter,
     sorting,
     setSorting,
-    isLoadingTables,
     isLoadingRows,
-    tableListError,
     rowsError,
     lastFetchedCount,
     fetchRows,
