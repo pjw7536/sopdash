@@ -40,7 +40,7 @@ export function NeedToSendCell({ meta, recordId, baseValue }: NeedToSendCellProp
               meta.removeNeedToSendDraftValue(recordId)
             }
           }}
-          disabled={isSaving || !meta.selectedTable}
+          disabled={isSaving}
           aria-label="Toggle need to send"
         />
         <div className="flex flex-row items-center gap-1 text-xs text-muted-foreground">
